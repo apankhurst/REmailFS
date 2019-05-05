@@ -1,0 +1,11 @@
+[package]
+name = "remailfs"
+version = "0.1.0"
+authors = ["Alex Pankhurst <alexspankhurs@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+libc = "*"
+time = "*"
+fuse = "*"
+lettre = "*"
