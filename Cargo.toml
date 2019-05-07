@@ -5,9 +5,7 @@ authors = ["Alex Pankhurst <alexspankhurs@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-libc = "*"
-time = "*"
-fuse = "*"
-lettre = "*"
-serde_json = "*"
-getopts = "*"
+libc = "0.2.53"
+time = "0.1.42"
+fuse = "0.3.1"
+getopts = "0.2.19"
