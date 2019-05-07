@@ -1,4 +1,3 @@
-extern crate serde_json;
 extern crate getopts;
 
 use std::env;
@@ -6,7 +5,7 @@ use getopts::Options;
 use remailfs::REmailFS;
 
 
-const DEFAULT_DOMAIN: &str = "imap.google.com";
+const DEFAULT_DOMAIN: &str = "imap.gmail.com";
 const DEFAULT_PORT: u16 = 993;
 
 const USAGE: &str = "Usage: remailfs [OPTION]... MOUNT POINT
@@ -107,12 +106,23 @@ impl Config {
                         .parse::<u16>()
                         .unwrap();
         
-        let fs = REmailFS::new(
+        println!("username   = {}", username);
+        println!("password   = {}", password);
+        println!("domain     = {}", domain);
+        println!("port       = {}", port);
+        println!("mountpoint = {}", mountpoint);
+
+        let fs = match REmailFS::new(
             username,
             password,
             domain,
             port
-        );
+        ) {
+            Ok(fs) => fs,
+            Err(e) => return None,
+        };
+
+        println!("created filesystem");
 
         Some(Config { filesystem: fs, mountpoint: mountpoint })
 

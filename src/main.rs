@@ -14,7 +14,10 @@ fn main() {
 
     let config = match config {
         Some(c) => c,
-        None => return,
+        None => {
+            eprintln!("failed to configure...");
+            return
+        },
     };
     
     // parse command line arguments 
