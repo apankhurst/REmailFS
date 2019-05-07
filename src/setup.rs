@@ -4,7 +4,6 @@ use std::env;
 use getopts::Options;
 use remailfs::REmailFS;
 
-
 const DEFAULT_DOMAIN: &str = "imap.gmail.com";
 const DEFAULT_PORT: u16 = 993;
 
