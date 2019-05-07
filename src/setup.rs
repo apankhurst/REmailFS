@@ -118,7 +118,7 @@ impl Config {
             port
         ) {
             Ok(fs) => fs,
-            Err(e) => return None,
+            Err(_) => return None,
         };
 
         println!("created filesystem");

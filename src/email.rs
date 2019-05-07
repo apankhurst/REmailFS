@@ -1,5 +1,5 @@
 use crate::IMAPSession;
-use imap::types::{ZeroCopy, Name};
+use imap::types::*;
 
 pub fn get_mailboxes(imap_session: &mut IMAPSession) -> Option<ZeroCopy<Vec<Name>>> {
     let mailboxes = imap_session.list(Some(""), Some("*"));
@@ -8,4 +8,14 @@ pub fn get_mailboxes(imap_session: &mut IMAPSession) -> Option<ZeroCopy<Vec<Name
     }
 
     return None
+}
+
+pub fn select_mailbox(imap_session: &mut IMAPSession, name: &str) -> Option<Mailbox> {
+    match imap_session.select(name) {
+        Ok(mb) => Some(mb), 
+        Err(_) => {
+          println!("error fetching mailbox {}", name);
+          None
+        },
+    }
 }

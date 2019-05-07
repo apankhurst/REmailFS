@@ -61,7 +61,7 @@ impl REmailFS {
 impl Filesystem for REmailFS {
     fn init(&mut self, _req: &Request) -> Result<(), c_int> {
         println!("Entered init!");
-        println!("Request: {:?}", _req);
+        
         let inboxes = email::get_mailboxes(&mut self.imap_session);
         if !inboxes.is_some() {
             return Err(-1);
@@ -76,6 +76,7 @@ impl Filesystem for REmailFS {
 
     fn destroy(&mut self, _req: &Request) {
         println!("Entered destroy!");
-        println!("Request: {:?}", _req);
+        
+        let _ =self.imap_session.logout();
     }
 }
