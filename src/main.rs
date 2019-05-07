@@ -7,17 +7,24 @@ use setup::Config;
 
 fn main() {
     // parse the command line arguments 
-    let config = Config::new(env::args())
-                    .expect("Unable to configure REmailFS");
+    // the config object should contain the filesystem
+    // the mountpoint and 
+    
+    let config = Config::new(env::args());
 
+    let config = match config {
+        Some(c) => c,
+        None => return,
+    };
+    
     // parse command line arguments 
     // setup the filesystem
     // mount the file system
-    
-    /*let _result = fuse::mount(
+
+    let _result = fuse::mount(
         config.filesystem,
         &config.mountpoint,
         &[]
-    );*/
+    );
 
 }
