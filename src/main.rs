@@ -15,7 +15,7 @@ fn main() {
     let config = match config {
         Some(c) => c,
         None => {
-            eprintln!("failed to configure...");
+            println!("failed to configure...");
             return
         },
     };
@@ -24,10 +24,13 @@ fn main() {
     // setup the filesystem
     // mount the file system
 
-    let _result = fuse::mount(
+    let result = fuse::mount(
         config.filesystem,
         &config.mountpoint,
         &[]
     );
 
+    if result.is_err() {
+        eprintln!("{:?}", result);
+    }
 }
