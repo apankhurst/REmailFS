@@ -2,8 +2,11 @@ extern crate libc;
 extern crate time;
 extern crate fuse;
 extern crate imap;
+extern crate mailparse;
+extern crate imap_proto;
 extern crate native_tls;
 
+use std::borrow::BorrowMut;
 use std::cmp::Ord;
 use std::ffi::OsStr;
 use std::cmp::Ordering;
@@ -15,6 +18,7 @@ use imap::Session;
 use fuse::Filesystem;
 use fuse::*;
 use native_tls::{TlsConnector, TlsStream};
+use imap_proto::types::Address;
 use imap::types::{Uid, Name, Fetch};
 use libc::{ENOENT, ENOSYS};
 use time::Timespec;
@@ -33,7 +37,7 @@ enum EmailObject<'a> {
 
 pub struct Email {
     abs_path: String,
-    contents: Option<Fetch>,
+    contents: Option<String>,
 }
 
 impl Email {
@@ -44,8 +48,16 @@ impl Email {
         }
     }
 
-    fn set_contents(&mut self, fetch: Fetch) {
-        self.contents = Some(fetch);
+    fn set_contents(&mut self, contents: String) {
+        self.contents = Some(contents);
+    }
+
+    fn contents_as_bytes(&self) -> Vec<u8> {
+        if let Some(c) = &self.contents {
+            c.clone().as_bytes().to_vec()
+        } else {
+            "".as_bytes().to_vec()
+        }
     }
 }
 
@@ -237,10 +249,10 @@ impl Filesystem for REmailFS {
             let mut uids = None; 
             let mut abs_path = mb.to_string();
             let mut mailbox = Mailbox::new(&abs_path);
-           
+
             self.next_inode += 1;
 
-            mailbox.info = match self.imap_session.select(*mb) {
+            mailbox.info = match self.imap_session.examine(*mb) {
                 Ok(mb) => Some(mb),
                 Err(_) => None,
             };
@@ -283,7 +295,7 @@ impl Filesystem for REmailFS {
                     path.push('/');
                     path.push_str(uid.to_string().as_str());
                     self.next_inode += 1;
-    
+
                     let email = Email::new(&path);
 
                     let email_attrs =  FileAttr {
@@ -324,47 +336,47 @@ impl Filesystem for REmailFS {
             let mut parent = self.mailboxes.get_mut(p_inode).unwrap();
             parent.add_content(inode);
         }
-/*
-        let mb = self.imap_session.examine("INBOX").unwrap();
-        let messages = self.imap_session.fetch("1:333", "RFC822").unwrap();
-        for message in messages.iter() {
-            let body = message.body().expect("message did not have a body!");
-            let body = std::str::from_utf8(body)
-                .expect("message was not valid utf-8")
-                .to_string();
+        /*
+           let mb = self.imap_session.examine("INBOX").unwrap();
+           let messages = self.imap_session.fetch("1:333", "RFC822").unwrap();
+           for message in messages.iter() {
+           let body = message.body().expect("message did not have a body!");
+           let body = std::str::from_utf8(body)
+           .expect("message was not valid utf-8")
+           .to_string();
 
-            println!("{}", body);
+           println!("{}", body);
 
-        }*/   
-       /* 
-        let message = if let Some(m) = messages.iter().next() {
-            m
-        } else {
-            return Ok(());
-        };
+           }*/   
+        /* 
+           let message = if let Some(m) = messages.iter().next() {
+           m
+           } else {
+           return Ok(());
+           };
 
         // extract the message's body
         let body = message.body().expect("message did not have a body!");
         let body = std::str::from_utf8(body)
-            .expect("message was not valid utf-8")
-            .to_string();
+        .expect("message was not valid utf-8")
+        .to_string();
 
         println!("{}", body);
-*/        /*let emails = self.imap_session.fetch("1", "RFC822").unwrap();
+        */        /*let emails = self.imap_session.fetch("1", "RFC822").unwrap();
 
-        for email in emails.iter() {
-            println!("-------------------------");
-            let envelope = match email.envelope() {
-                Some(e) => e,
-                None => continue
-            };
-            let subject = match envelope.subject {
-                Some(s) => s,
-                None => continue
-            };
- 
-            println!("{}", std::str::from_utf8(email.body().unwrap()).unwrap().to_string()); 
-        }*/
+                    for email in emails.iter() {
+                    println!("-------------------------");
+                    let envelope = match email.envelope() {
+                    Some(e) => e,
+                    None => continue
+                    };
+                    let subject = match envelope.subject {
+                    Some(s) => s,
+                    None => continue
+                    };
+
+                    println!("{}", std::str::from_utf8(email.body().unwrap()).unwrap().to_string()); 
+                    }*/
 
         println!("GOT EMAILS");
 
@@ -393,7 +405,7 @@ impl Filesystem for REmailFS {
         println!("readdir(ino = {}, fh = {})", _ino, _fh);
 
         let mailbox = self.mailboxes.get(&_ino);
-        
+
         let mut mailbox = if mailbox.is_none() {
             println!("ENOENT in readdir");
             reply.error(ENOENT);
@@ -407,7 +419,7 @@ impl Filesystem for REmailFS {
             let mut count = 2;
             let mut info = &mailbox.info;
             let contents = &mailbox.contents;
-            
+
             reply.add(1, 0, FileType::Directory, ".");
             reply.add(1, 1, FileType::Directory, "..");
 
@@ -415,9 +427,10 @@ impl Filesystem for REmailFS {
                 let base: EmailObject = if self.mailboxes.get(inode).is_some() {
                     EmailObject::M(self.mailboxes.get(inode).unwrap())
                 } else {
+                    println!(">>> READDIR ON EMAIL <<<");
                     EmailObject::E(self.emails.get(inode).unwrap())
                 };
-                
+
                 let rel_path = match base {
                     EmailObject::E(e) => e.abs_path.clone(),
                     EmailObject::M(m) => m.abs_path.clone(),
@@ -427,7 +440,7 @@ impl Filesystem for REmailFS {
                     .rsplitn(2, "/")
                     .next()
                     .unwrap();
-                
+
                 let f_type = self.attributes.get(inode)
                     .unwrap()
                     .kind;
@@ -455,7 +468,7 @@ impl Filesystem for REmailFS {
         } else {
             "".to_string()
         };
-        
+
         if _parent != 1 { abs_path.push('/') }; 
 
         abs_path.push_str(_name);
@@ -478,5 +491,91 @@ impl Filesystem for REmailFS {
             println!("ENOENT in lookup2");
             reply.error(ENOENT);
         }
+    }
+
+    fn read(&mut self, _req: &Request, _ino: u64, _fh: u64, _offset: i64, _size: u32, reply: ReplyData) {
+        println!("read(_ino = {})", _ino);
+        let mut email = self.emails.get_mut(&_ino);
+
+        if email.is_none() {
+            println!("NO EMAIL");
+            reply.error(ENOENT);
+            return;
+        }
+
+        let mut email = email.unwrap();
+
+        if email.contents.is_none() {
+            println!("NO CONTENTS YET");
+            let split_path: Vec<&str> = email.abs_path.rsplitn(2, "/").collect();    
+
+            let uid = split_path[0];
+            let parent = split_path[1];
+
+            self.imap_session.examine(parent);
+
+            let contents = self.imap_session.uid_fetch(uid, "RFC822");
+
+            if contents.is_err() {
+                println!("COULDN'T GET CONTENTS");
+                reply.error(ENOENT);
+                return;
+            } 
+
+            let mut data = "".to_string();
+
+            let fetch: &Fetch = &contents.unwrap()[0];
+            
+            let body = fetch.body().expect("message did not have a body!");
+            let body = std::str::from_utf8(body)
+                .expect("message was not valid utf-8")
+                .to_string();
+
+            data.push_str(&body);
+            email.contents = Some(data);
+        }
+        
+        let mut email = self.emails.get_mut(&_ino).unwrap();
+        let contents = email.contents.clone().unwrap();
+
+        println!(">>> EMAIL = {}", email.contents.clone().unwrap());
+
+        let parsed = mailparse::parse_mail(contents.as_bytes()).unwrap();
+        let mut subject = "".to_string();
+        let mut from = "".to_string();
+        let mut date = "".to_string();
+        for header in parsed.headers {
+            let key = header.get_key().unwrap();
+            let val = header.get_value().unwrap();
+           
+            //println!("{}: {}", key, val);
+
+            match key.as_str() {
+                "Subject" => subject = val,
+                "From" => from = val,
+                "Date" => date = val,
+                _ => (),
+            }
+        }
+      
+        let mut reply_text = "".to_string();
+
+        let mut add_data = |header, var| {
+            reply_text.push_str(header);
+            reply_text.push(' ');
+            reply_text.push_str(var);
+            reply_text.push('\n');
+        };
+
+        add_data("Subject:", &subject);
+        add_data("From:", &from);
+        add_data("Date:", &date);
+
+        println!("{}", reply_text);
+
+        let my_data = "abcdefghijklmnopqrstuvwxyz\n";
+        reply.data(reply_text.as_bytes());
+        //reply.data(&email.contents_as_bytes());
+
     }
 }
