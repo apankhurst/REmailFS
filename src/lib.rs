@@ -22,6 +22,7 @@ use imap_proto::types::Address;
 use imap::types::{Uid, Name, Fetch};
 use libc::{ENOENT, ENOSYS};
 use time::Timespec;
+use time::strptime;
 
 mod error;
 
@@ -38,6 +39,9 @@ enum EmailObject<'a> {
 pub struct Email {
     abs_path: String,
     contents: Option<String>,
+    subject: Option<String>,
+    from: Option<String>,
+    date: Option<String>,
 }
 
 impl Email {
@@ -45,11 +49,26 @@ impl Email {
         Email {
             abs_path: abs_path.to_string(),
             contents: None,
+            subject: None,
+            from: None,
+            date: None,
         }
     }
 
     fn set_contents(&mut self, contents: String) {
         self.contents = Some(contents);
+    }
+
+    fn set_subject(&mut self, subject: String) {
+        self.subject = Some(subject);
+    }
+
+    fn set_from(&mut self, from: String) {
+        self.from = Some(from);
+    }
+
+    fn set_date(&mut self, date: String) {
+        self.date = Some(date)
     }
 
     fn contents_as_bytes(&self) -> Vec<u8> {
@@ -246,7 +265,6 @@ impl Filesystem for REmailFS {
         for mb in all_boxes.iter() {
             println!("adding {}", *mb);
             let inode = self.next_inode;
-            let mut uids = None; 
             let mut abs_path = mb.to_string();
             let mut mailbox = Mailbox::new(&abs_path);
 
@@ -254,15 +272,8 @@ impl Filesystem for REmailFS {
 
             mailbox.info = match self.imap_session.examine(*mb) {
                 Ok(mb) => Some(mb),
-                Err(_) => None,
+                Err(_) => None
             };
-
-            if mailbox.info.is_some() {
-                uids = match self.imap_session.uid_search("1:*") {
-                    Ok(u) => Some(u),
-                    Err(_) => continue
-                };
-            }
 
             let mailbox_attrs =  FileAttr {
                 ino: inode,
@@ -280,51 +291,54 @@ impl Filesystem for REmailFS {
                 rdev: 0,
                 flags: 0,
             };
-
+                
             self.inodes.insert(abs_path.clone(), inode);
             self.mailboxes.insert(inode, mailbox);
             self.attributes.insert(inode, mailbox_attrs);
 
+            let mut parent = self.mailboxes.get_mut(&inode).unwrap();
+            let uids = match self.imap_session.uid_search("1:*") {
+                Ok(u) => Some(u),
+                Err(_) => None,
+            };
+
             if uids.is_some() {
-                let mut parent = self.mailboxes.get_mut(&inode).unwrap();
+            for uid in uids.unwrap() {
+                let mut path = abs_path.clone();
+                let u_inode = self.next_inode;
 
-                for uid in uids.unwrap() {
-                    let mut path = abs_path.clone();
-                    let u_inode = self.next_inode;
+                path.push('/');
+                path.push_str(uid.to_string().as_str());
+                self.next_inode += 1;
 
-                    path.push('/');
-                    path.push_str(uid.to_string().as_str());
-                    self.next_inode += 1;
+                let email = Email::new(&path);
 
-                    let email = Email::new(&path);
+                let email_attrs =  FileAttr {
+                    ino: u_inode,
+                    size: 4096,
+                    blocks: 1,
+                    atime: now,
+                    mtime: now,
+                    ctime: Timespec::new(0,0),
+                    crtime: Timespec::new(0,0),
+                    kind: FileType::RegularFile,
+                    perm: 0o444,
+                    nlink: 1,
+                    uid: _req.uid(),
+                    gid: _req.gid(),
+                    rdev: 0,
+                    flags: 0,
+                };
 
-                    let email_attrs =  FileAttr {
-                        ino: u_inode,
-                        size: 4096,
-                        blocks: 1,
-                        atime: now,
-                        mtime: now,
-                        ctime: Timespec::new(0,0),
-                        crtime: Timespec::new(0,0),
-                        kind: FileType::RegularFile,
-                        perm: 0o444,
-                        nlink: 1,
-                        uid: _req.uid(),
-                        gid: _req.gid(),
-                        rdev: 0,
-                        flags: 0,
-                    };
+                self.inodes.insert(path.clone(), u_inode);
+                self.emails.insert(u_inode, email);
+                self.attributes.insert(u_inode, email_attrs);
 
-                    self.inodes.insert(path.clone(), u_inode);
-                    self.emails.insert(u_inode, email);
-                    self.attributes.insert(u_inode, email_attrs);
+                parent.add_content(u_inode);
 
-                    parent.add_content(u_inode);
-
-                    println!("{}", path); 
-                }
+                //println!("{}", path); 
             }
-
+            }
             let mut split_path: Vec<&str> = abs_path.rsplitn(2, "/")
                 .collect();
             let mut p_inode = &1;
@@ -336,50 +350,7 @@ impl Filesystem for REmailFS {
             let mut parent = self.mailboxes.get_mut(p_inode).unwrap();
             parent.add_content(inode);
         }
-        /*
-           let mb = self.imap_session.examine("INBOX").unwrap();
-           let messages = self.imap_session.fetch("1:333", "RFC822").unwrap();
-           for message in messages.iter() {
-           let body = message.body().expect("message did not have a body!");
-           let body = std::str::from_utf8(body)
-           .expect("message was not valid utf-8")
-           .to_string();
-
-           println!("{}", body);
-
-           }*/   
-        /* 
-           let message = if let Some(m) = messages.iter().next() {
-           m
-           } else {
-           return Ok(());
-           };
-
-        // extract the message's body
-        let body = message.body().expect("message did not have a body!");
-        let body = std::str::from_utf8(body)
-        .expect("message was not valid utf-8")
-        .to_string();
-
-        println!("{}", body);
-        */        /*let emails = self.imap_session.fetch("1", "RFC822").unwrap();
-
-                    for email in emails.iter() {
-                    println!("-------------------------");
-                    let envelope = match email.envelope() {
-                    Some(e) => e,
-                    None => continue
-                    };
-                    let subject = match envelope.subject {
-                    Some(s) => s,
-                    None => continue
-                    };
-
-                    println!("{}", std::str::from_utf8(email.body().unwrap()).unwrap().to_string()); 
-                    }*/
-
-        println!("GOT EMAILS");
-
+        println!("REmailFS is ready to use!");
         Ok(())
     }
 
@@ -447,8 +418,9 @@ impl Filesystem for REmailFS {
 
                 reply.add(*inode, 2+count as i64, f_type, rel_path); 
                 count += 1;
-
             }
+
+            println!("CONTENT COUNT = {}", count);
 
             reply.ok();
         }
@@ -476,7 +448,6 @@ impl Filesystem for REmailFS {
         let inode = match self.inodes.get(&abs_path) {
             Some(i) => i,
             None => {
-                println!("ENOENT in lookup1");
                 reply.error(ENOENT);
                 return;
             }
@@ -488,7 +459,6 @@ impl Filesystem for REmailFS {
             let ttl = Timespec::new(1, 0);
             reply.entry(&ttl, a, 1);
         } else {
-            println!("ENOENT in lookup2");
             reply.error(ENOENT);
         }
     }
@@ -498,7 +468,6 @@ impl Filesystem for REmailFS {
         let mut email = self.emails.get_mut(&_ino);
 
         if email.is_none() {
-            println!("NO EMAIL");
             reply.error(ENOENT);
             return;
         }
@@ -506,7 +475,6 @@ impl Filesystem for REmailFS {
         let mut email = email.unwrap();
 
         if email.contents.is_none() {
-            println!("NO CONTENTS YET");
             let split_path: Vec<&str> = email.abs_path.rsplitn(2, "/").collect();    
 
             let uid = split_path[0];
@@ -517,7 +485,6 @@ impl Filesystem for REmailFS {
             let contents = self.imap_session.uid_fetch(uid, "RFC822");
 
             if contents.is_err() {
-                println!("COULDN'T GET CONTENTS");
                 reply.error(ENOENT);
                 return;
             } 
@@ -525,57 +492,76 @@ impl Filesystem for REmailFS {
             let mut data = "".to_string();
 
             let fetch: &Fetch = &contents.unwrap()[0];
-            
-            let body = fetch.body().expect("message did not have a body!");
-            let body = std::str::from_utf8(body)
-                .expect("message was not valid utf-8")
-                .to_string();
+            let body = fetch.body();;
+            let mut body_str = "".to_string();
+                
+            if body.is_some() {
+                let new_body_str = std::str::from_utf8(body.unwrap());
+                if new_body_str.is_ok() {
+                    body_str.push_str(&new_body_str.unwrap().to_string());
+                }
+            }
 
-            data.push_str(&body);
+            data.push_str(&body_str);
             email.contents = Some(data);
         }
-        
+
         let mut email = self.emails.get_mut(&_ino).unwrap();
         let contents = email.contents.clone().unwrap();
 
         println!(">>> EMAIL = {}", email.contents.clone().unwrap());
 
-        let parsed = mailparse::parse_mail(contents.as_bytes()).unwrap();
-        let mut subject = "".to_string();
-        let mut from = "".to_string();
-        let mut date = "".to_string();
-        for header in parsed.headers {
-            let key = header.get_key().unwrap();
-            let val = header.get_value().unwrap();
-           
-            //println!("{}: {}", key, val);
-
-            match key.as_str() {
-                "Subject" => subject = val,
-                "From" => from = val,
-                "Date" => date = val,
-                _ => (),
-            }
-        }
-      
         let mut reply_text = "".to_string();
-
-        let mut add_data = |header, var| {
-            reply_text.push_str(header);
-            reply_text.push(' ');
-            reply_text.push_str(var);
+        let mut add_key_val = |k: &str, v: &str| {
+            reply_text.push_str(k.clone());
+            reply_text.push_str(": ");
+            reply_text.push_str(v.clone());
             reply_text.push('\n');
         };
 
-        add_data("Subject:", &subject);
-        add_data("From:", &from);
-        add_data("Date:", &date);
+        let parsed = mailparse::parse_mail(contents.as_bytes()).unwrap();
+
+        for header in parsed.headers {
+            let key = header.get_key().unwrap();
+            let val = header.get_value().unwrap();
+
+            match key.as_str() {
+                "Subject" => {
+                    let mut new_path = "".to_string(); 
+                    let split_path: Vec<&str> = email.abs_path.rsplitn(2, "/").collect();
+                    new_path.push_str(split_path[1]);
+                    new_path.push('/');
+                    new_path.push_str(val.as_str());
+
+                    email.abs_path = new_path.to_string();
+                    self.inodes.insert(new_path, _ino);
+
+                    add_key_val(key.as_str(), val.as_str())
+                }
+                "From"      => add_key_val(key.as_str(), val.as_str()), 
+                "Date"      => {
+                    // Mon, 15 Apr 2019 17:49:15 -0500 (CDT)   
+                    let tm = strptime(val.as_str(), "%a, %d %b %Y %H:%M:%S");
+                    if tm.is_ok() {
+                        let tm = tm.unwrap().to_timespec();
+                        let mut attr = self.attributes.get_mut(&_ino).unwrap();
+                        attr.atime = tm;
+                        attr.mtime = tm;
+                        attr.ctime = tm;
+                        attr.crtime = tm;
+                        println!(">>> FORMATTED TIME");
+                    } else {
+                        println!(">>> Unable to format time");
+                    }
+                    add_key_val(key.as_str(), val.as_str())
+                },
+                _ => (),
+            }
+        }
+
 
         println!("{}", reply_text);
 
-        let my_data = "abcdefghijklmnopqrstuvwxyz\n";
         reply.data(reply_text.as_bytes());
-        //reply.data(&email.contents_as_bytes());
-
     }
 }
