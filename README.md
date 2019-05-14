@@ -1,5 +1,18 @@
 # REmailFS
 
+## About 
+
+REmailFS is a FUSE application allows emails to be fetched from an IMAP server and viewed as files. As on now the funcitonality that has been implemented is fairly rudimentary but includes:
+
+1) Connecting to the IMAP server.
+2) Listing all mailboxes on the server.
+3) Downloading an email and viewing it as a file.
+
+As it stands REmailFS only supports reading data from an IMAP server, modifying the contents of the server will be supported in the future. 
+
+REmailFS lists each mailbox as a directory in the filesystem tree. The contents of a directory will be the child mailboxes of the current mailbox and the emails that are stored in the mailbox. When an email is opened locally it is fetched from the server if it is not stored locally already and displays the subject, date, sender, and content of the email. Currently, due to variations in the format of reveived emails, the content of an email is fetched if and only if the email containts a MIME text/plain section. Any other content will be ignored.  
+
+
 ## Initial Setup
 IMAP must be enabled on any account that you wish to use REmailFS with.
 
@@ -13,5 +26,4 @@ IMAP must be enabled on any account that you wish to use REmailFS with.
 Full instructions at to generate an [App password](https://support.google.com/accounts/answer/185833)
 
 ## Running REmailFS
-
-
+1) Make sure that your username and password are set as either environment variables 

@@ -559,8 +559,16 @@ impl Filesystem for REmailFS {
             }
         }
 
+        println!("Getting subparts...");
 
-        println!("{}", reply_text);
+        for subpart in parsed.subparts.iter() {
+            if subpart.ctype.mimetype == "text/plain" {
+                add_key_val("Body", &subpart.get_body().unwrap());
+                //println!("BODY\n{}", subpart.get_body().unwrap());
+            }
+            //println!("{}", subpart.ctype.mimetype);
+        }
+        //println!("{}", reply_text);
 
         reply.data(reply_text.as_bytes());
     }
