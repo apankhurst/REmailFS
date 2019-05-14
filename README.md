@@ -12,6 +12,8 @@ As it stands REmailFS only supports reading data from an IMAP server, modifying 
 
 REmailFS lists each mailbox as a directory in the filesystem tree. The contents of a directory will be the child mailboxes of the current mailbox and the emails that are stored in the mailbox. When an email is opened locally it is fetched from the server if it is not stored locally already and displays the subject, date, sender, and content of the email. Currently, due to variations in the format of reveived emails, the content of an email is fetched if and only if the email containts a MIME text/plain section. Any other content will be ignored.  
 
+IMAP does not support fetching the most recent X emails so at the moment REmailFS will list the session UIDs of the emails in the inbox and then fetch the important information about those emails when they are read. After fetching an email, that email will appear in the filesytem tree with its subject line as the key instead of its session UID.
+
 ## FUSE 
 
 The following FUSE methods have been implemented so far, any of the methods not listed here are default implementations.
