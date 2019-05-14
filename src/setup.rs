@@ -3,6 +3,7 @@ extern crate getopts;
 use std::env;
 use getopts::Options;
 use remailfs::REmailFS;
+use rand::Rng;
 
 const DEFAULT_DOMAIN: &str = "imap.gmail.com";
 const DEFAULT_PORT: u16 = 993;
@@ -104,9 +105,16 @@ impl Config {
                         .unwrap()
                         .parse::<u16>()
                         .unwrap();
-        
+       
+        let convert_to_stars = || {
+            let plus_minus: usize = rand::thread_rng().gen_range(0, 8) - 4;
+            std::iter::repeat("*")
+                .take(plus_minus + password.len())
+                .collect::<String>()
+        };
+
         println!("username   = {}", username);
-        println!("password   = {}", password);
+        println!("password   = {}", convert_to_stars());
         println!("domain     = {}", domain);
         println!("port       = {}", port);
         println!("mountpoint = {}", mountpoint);
